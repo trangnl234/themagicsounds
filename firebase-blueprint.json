@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "AdminAccount": {
+      "title": "AdminAccount",
+      "description": "Administrator marker record granting admin privileges.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the admin record was created."
+        }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "UserPublicProfile": {
+      "title": "UserPublicProfile",
+      "description": "Public profile, unlocked courses, and learning progress summary for an authenticated student account.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Display username chosen by the user.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "unlockedTuneIn": {
+          "type": "boolean",
+          "description": "Whether the Tune In listening section is unlocked for this user."
+        },
+        "unlockedMagicSounds": {
+          "type": "boolean",
+          "description": "Whether the full Magic Sounds course is unlocked for this user."
+        },
+        "unlockedSoundCode": {
+          "type": "boolean",
+          "description": "Whether the full Sound Code course is unlocked for this user."
+        },
+        "unlockedSoundToSpeech": {
+          "type": "boolean",
+          "description": "Whether the full Sound to Speech course is unlocked for this user."
+        },
+        "learnedSoundsCount": {
+          "type": "integer",
+          "description": "Total number of phonics sounds practiced by the student."
+        },
+        "completedBooksCount": {
+          "type": "integer",
+          "description": "Total number of decodable books completed by the student."
+        },
+        "lastStudiedItem": {
+          "type": "string",
+          "description": "Description of the most recent lesson or sound practiced.",
+          "minLength": 0,
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated."
+        }
+      },
+      "required": ["uid", "username", "unlockedTuneIn", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII record containing the user's private email address.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified email address of the user.",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the private record was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the private record was updated."
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "ActivationCode": {
+      "title": "ActivationCode",
+      "description": "One-time course activation code bound to a specific student email address.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Unique one-time activation code string.",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "targetEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Lowercase email address of the student who completed bank transfer.",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "courseKey": {
+          "type": "string",
+          "description": "Course key unlocked by this code.",
+          "enum": ["magic-sounds", "sound-code", "tune-in", "sound-to-speech"],
+          "minLength": 4,
+          "maxLength": 32
+        },
+        "used": {
+          "type": "boolean",
+          "description": "Whether this one-time activation code has already been redeemed."
+        },
+        "createdByUid": {
+          "type": "string",
+          "description": "UID of the admin who generated this code.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the code was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the code was updated or redeemed."
+        }
+      },
+      "required": ["code", "targetEmail", "courseKey", "used", "createdByUid", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminAccount" },
+      "description": "Stores administrator UID records."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublicProfile" },
+      "description": "Stores public profile, unlocked courses, and learning progress for each user."
+    },
+    "/users/{userId}/private/{infoId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Stores isolated PII (email) accessible strictly by the owner or admin."
+    },
+    "/activationCodes/{codeId}": {
+      "schema": { "$ref": "#/entities/ActivationCode" },
+      "description": "Stores one-time course activation codes bound to a specific student email."
+    }
+  }
+}

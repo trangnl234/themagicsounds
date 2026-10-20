@@ -1,0 +1,6 @@
+{
+  "name": "Ms Trang ASI Phonics",
+  "description": "Hệ thống học đánh vần tiếng Anh chuẩn Jolly Phonics UK với 42 âm, âm thay thế, 72 Tricky Words và 70 truyện đọc Decodable Readers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
