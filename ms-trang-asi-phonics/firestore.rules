@@ -1,0 +1,263 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isVerifiedAdminEmail() {
+      return isVerifiedUser() && request.auth.token.email == 'trangnguyen.asi@gmail.com';
+    }
+
+    function isAdmin() {
+      return isVerifiedAdminEmail() || (
+        isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprint: AdminAccount (/admins/{adminId})
+    function isValidAdminAccount(data) {
+      return data.keys().hasAll(['uid', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'createdAt'])
+        && data.uid is string
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.createdAt is timestamp;
+    }
+
+    // Validation Blueprint: UserPublicProfile (/users/{userId})
+    function isValidUserPublicProfile(data) {
+      return data.keys().hasAll(['uid', 'username', 'unlockedTuneIn', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid',
+          'username',
+          'unlockedTuneIn',
+          'unlockedMagicSounds',
+          'unlockedSoundCode',
+          'unlockedSoundToSpeech',
+          'learnedSoundsCount',
+          'completedBooksCount',
+          'lastStudiedItem',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.uid is string
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.username is string
+        && data.username.size() >= 1
+        && data.username.size() <= 60
+        && data.unlockedTuneIn is bool
+        && (!('unlockedMagicSounds' in data) || data.unlockedMagicSounds is bool)
+        && (!('unlockedSoundCode' in data) || data.unlockedSoundCode is bool)
+        && (!('unlockedSoundToSpeech' in data) || data.unlockedSoundToSpeech is bool)
+        && (!('learnedSoundsCount' in data) || (data.learnedSoundsCount is int && data.learnedSoundsCount >= 0 && data.learnedSoundsCount <= 500))
+        && (!('completedBooksCount' in data) || (data.completedBooksCount is int && data.completedBooksCount >= 0 && data.completedBooksCount <= 500))
+        && (!('lastStudiedItem' in data) || (data.lastStudiedItem is string && data.lastStudiedItem.size() <= 200))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: UserPrivateInfo (/users/{userId}/private/{infoId})
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.uid == request.auth.uid
+        && data.email is string
+        && data.email.size() >= 3
+        && data.email.size() <= 120
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: ActivationCode (/activationCodes/{codeId})
+    function isValidActivationCode(data) {
+      return data.keys().hasAll(['code', 'targetEmail', 'courseKey', 'used', 'createdByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['code', 'targetEmail', 'courseKey', 'used', 'createdByUid', 'createdAt', 'updatedAt'])
+        && data.code is string
+        && data.code.size() >= 4
+        && data.code.size() <= 32
+        && data.code.matches('^[A-Z0-9_\\-]+$')
+        && data.targetEmail is string
+        && data.targetEmail.size() >= 3
+        && data.targetEmail.size() <= 120
+        && data.courseKey is string
+        && data.courseKey.size() >= 4
+        && data.courseKey.size() <= 32
+        && data.courseKey in ['magic-sounds', 'sound-code', 'tune-in', 'sound-to-speech']
+        && data.used is bool
+        && data.createdByUid is string
+        && data.createdByUid.size() >= 1
+        && data.createdByUid.size() <= 128
+        && data.createdByUid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Collection: /admins/{adminId}
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if false;
+      allow create: if isAdmin()
+        && isValidId(adminId)
+        && isValidAdminAccount(incoming())
+        && incoming().uid == adminId
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // Collection: /users/{userId}
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isVerifiedAdminEmail());
+
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserPublicProfile(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUserPublicProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'username',
+              'unlockedTuneIn',
+              'unlockedMagicSounds',
+              'unlockedSoundCode',
+              'unlockedSoundToSpeech',
+              'learnedSoundsCount',
+              'completedBooksCount',
+              'lastStudiedItem',
+              'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if false;
+
+      // Subcollection: /users/{userId}/private/{infoId} (PII Split Collection)
+      match /private/{infoId} {
+        allow get: if isValidId(userId)
+          && isValidId(infoId)
+          && infoId == 'info'
+          && (
+            isAdmin() ||
+            (isOwner(userId) && get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid)
+          );
+
+        allow list: if false;
+
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(infoId)
+          && infoId == 'info'
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming())
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
+
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(infoId)
+          && infoId == 'info'
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isAdmin() ||
+            (
+              isOwner(userId) &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt']) &&
+              get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid
+            )
+          );
+
+        allow delete: if false;
+      }
+    }
+
+    // Collection: /activationCodes/{codeId}
+    match /activationCodes/{codeId} {
+      allow get: if isValidId(codeId)
+        && isVerifiedUser()
+        && (isAdmin() || resource.data.targetEmail == request.auth.token.email);
+
+      allow list: if isVerifiedUser()
+        && (isVerifiedAdminEmail() || resource.data.targetEmail == request.auth.token.email);
+
+      allow create: if isAdmin()
+        && isValidId(codeId)
+        && isValidActivationCode(incoming())
+        && incoming().code == codeId
+        && incoming().used == false
+        && incoming().createdByUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(codeId)
+        && isValidActivationCode(incoming())
+        && incoming().code == existing().code
+        && incoming().targetEmail == existing().targetEmail
+        && incoming().courseKey == existing().courseKey
+        && incoming().createdByUid == existing().createdByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().used == false &&
+            incoming().used == true &&
+            existing().targetEmail == request.auth.token.email &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['used', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+  }
+}
